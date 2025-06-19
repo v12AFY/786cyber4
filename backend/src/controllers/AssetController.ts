@@ -37,7 +37,7 @@ export class AssetController {
 
       const total = await Asset.countDocuments(filter);
 
-      res.json({
+      return res.json({
         assets,
         pagination: {
           page: Number(page),
@@ -48,7 +48,7 @@ export class AssetController {
       });
     } catch (error) {
       logger.error('Error fetching assets:', error);
-      res.status(500).json({ error: 'Failed to fetch assets' });
+      return res.status(500).json({ error: 'Failed to fetch assets' });
     }
   }
 
@@ -58,10 +58,10 @@ export class AssetController {
       await asset.save();
       
       logger.info(`Asset created: ${asset.name}`);
-      res.status(201).json(asset);
+      return res.status(201).json(asset);
     } catch (error) {
       logger.error('Error creating asset:', error);
-      res.status(400).json({ error: 'Failed to create asset' });
+      return res.status(400).json({ error: 'Failed to create asset' });
     }
   }
 
@@ -73,10 +73,10 @@ export class AssetController {
         return res.status(404).json({ error: 'Asset not found' });
       }
       
-      res.json(asset);
+      return res.json(asset);
     } catch (error) {
       logger.error('Error fetching asset:', error);
-      res.status(500).json({ error: 'Failed to fetch asset' });
+      return res.status(500).json({ error: 'Failed to fetch asset' });
     }
   }
 
@@ -93,10 +93,10 @@ export class AssetController {
       }
       
       logger.info(`Asset updated: ${asset.name}`);
-      res.json(asset);
+      return res.json(asset);
     } catch (error) {
       logger.error('Error updating asset:', error);
-      res.status(400).json({ error: 'Failed to update asset' });
+      return res.status(400).json({ error: 'Failed to update asset' });
     }
   }
 
@@ -109,10 +109,10 @@ export class AssetController {
       }
       
       logger.info(`Asset deleted: ${asset.name}`);
-      res.json({ message: 'Asset deleted successfully' });
+      return res.json({ message: 'Asset deleted successfully' });
     } catch (error) {
       logger.error('Error deleting asset:', error);
-      res.status(500).json({ error: 'Failed to delete asset' });
+      return res.status(500).json({ error: 'Failed to delete asset' });
     }
   }
 
@@ -120,34 +120,34 @@ export class AssetController {
     try {
       const scanId = await this.assetDiscovery.startDiscovery();
       
-      res.json({ 
+      return res.json({ 
         success: true, 
         scanId,
         message: 'Asset discovery scan initiated' 
       });
     } catch (error) {
       logger.error('Error starting asset scan:', error);
-      res.status(500).json({ error: 'Failed to start asset scan' });
+      return res.status(500).json({ error: 'Failed to start asset scan' });
     }
   }
 
   async getExternalSurface(req: Request, res: Response) {
     try {
       const externalAssets = await this.externalScanner.scanExternalSurface();
-      res.json(externalAssets);
+      return res.json(externalAssets);
     } catch (error) {
       logger.error('Error fetching external surface:', error);
-      res.status(500).json({ error: 'Failed to fetch external surface data' });
+      return res.status(500).json({ error: 'Failed to fetch external surface data' });
     }
   }
 
   async getDarkWebAlerts(req: Request, res: Response) {
     try {
       const alerts = await this.darkWebMonitor.getRecentAlerts();
-      res.json(alerts);
+      return res.json(alerts);
     } catch (error) {
       logger.error('Error fetching dark web alerts:', error);
-      res.status(500).json({ error: 'Failed to fetch dark web alerts' });
+      return res.status(500).json({ error: 'Failed to fetch dark web alerts' });
     }
   }
 }
