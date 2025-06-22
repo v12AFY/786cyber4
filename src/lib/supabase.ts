@@ -8,9 +8,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables. Please check your .env file and ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set.')
 }
 
-// Validate URL format
-if (!supabaseUrl.startsWith('https://') || !supabaseUrl.includes('.supabase.co')) {
-  throw new Error(`Invalid Supabase URL format: ${supabaseUrl}. Expected format: https://your-project-ref.supabase.co`)
+// Validate URL format - accept both standard supabase.co domains and custom domains
+if (!supabaseUrl.startsWith('https://')) {
+  throw new Error(`Invalid Supabase URL format: ${supabaseUrl}. URL must start with https://`)
 }
 
 // Validate anon key format (basic check)
