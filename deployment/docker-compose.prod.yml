@@ -23,8 +23,8 @@ services:
   # Backend API
   backend:
     build:
-      context: ./backend
-      dockerfile: ../deployment/Dockerfile.backend
+      context: .
+      dockerfile: deployment/Dockerfile.backend
     ports:
       - "3001:3001"
     environment:
