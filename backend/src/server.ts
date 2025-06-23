@@ -7,8 +7,8 @@ import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import dotenv from 'dotenv';
 
-import { connectDatabase } from './config/database';
 import { connectRedis } from './config/redis';
+import { testSupabaseConnection } from './config/supabase';
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { rateLimiterMiddleware } from './middleware/rateLimiter';
@@ -63,7 +63,8 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    version: '1.0.0'
+    version: '1.0.0',
+    database: 'Supabase PostgreSQL'
   });
 });
 
@@ -99,7 +100,10 @@ const assetDiscovery = new AssetDiscoveryService(io);
 // Start server
 async function startServer() {
   try {
-    await connectDatabase();
+    // Test Supabase connection
+    await testSupabaseConnection();
+    
+    // Connect to Redis
     await connectRedis();
     
     // Start background services
@@ -110,6 +114,7 @@ async function startServer() {
     server.listen(PORT, () => {
       logger.info(`🚀 Server running on port ${PORT}`);
       logger.info(`📊 Dashboard: http://localhost:${PORT}/api/health`);
+      logger.info(`🗄️ Database: Supabase PostgreSQL`);
     });
   } catch (error) {
     logger.error('Failed to start server:', error);

@@ -1,42 +1,16 @@
 import { Request, Response } from 'express';
-import { Asset } from '../models/Asset';
-import { Vulnerability } from '../models/Vulnerability';
-import { User } from '../models/User';
-import { SecurityAlert } from '../models/SecurityAlert';
+import { analyticsService, securityAlertService } from '../services/supabaseDb';
 import { logger } from '../utils/logger';
 import { SecurityMonitoringService } from '../services/SecurityMonitoringService';
 
 export class SecurityController {
   async getSecurityMetrics(req: Request, res: Response) {
     try {
-      const [
-        totalAssets,
-        criticalVulns,
-        activeThreats,
-        totalUsers
-      ] = await Promise.all([
-        Asset.countDocuments(),
-        Vulnerability.countDocuments({ severity: 'Critical', status: 'Open' }),
-        SecurityAlert.countDocuments({ status: 'active' }),
-        User.countDocuments({ status: 'active' })
-      ]);
-
-      // Calculate security score based on various factors
-      const securityScore = await this.calculateSecurityScore();
+      // Get tenant ID from authenticated user context
+      const tenantId = req.user?.tenantId || '550e8400-e29b-41d4-a716-446655440001'; // Demo tenant fallback
       
-      const metrics = {
-        securityScore,
-        activeThreats,
-        complianceStatus: await this.calculateComplianceStatus(),
-        assetsProtected: totalAssets,
-        trends: {
-          securityScore: '+2%',
-          activeThreats: '-3',
-          complianceStatus: '+5%',
-          assetsProtected: '+12'
-        }
-      };
-
+      const metrics = await analyticsService.getDashboardMetrics(tenantId);
+      
       res.json(metrics);
     } catch (error) {
       logger.error('Error fetching security metrics:', error);
@@ -46,21 +20,11 @@ export class SecurityController {
 
   async getRecentAlerts(req: Request, res: Response) {
     try {
-      const alerts = await SecurityAlert.find()
-        .sort({ createdAt: -1 })
-        .limit(10)
-        .populate('affectedAssets', 'name type');
-
-      const formattedAlerts = alerts.map(alert => ({
-        id: alert._id,
-        severity: alert.severity,
-        message: alert.message,
-        time: this.formatTimeAgo(alert.createdAt),
-        type: alert.type,
-        status: alert.status
-      }));
-
-      res.json(formattedAlerts);
+      const tenantId = req.user?.tenantId || '550e8400-e29b-41d4-a716-446655440001'; // Demo tenant fallback
+      
+      const alerts = await analyticsService.getRecentAlerts(tenantId, 10);
+      
+      res.json(alerts);
     } catch (error) {
       logger.error('Error fetching recent alerts:', error);
       res.status(500).json({ error: 'Failed to fetch recent alerts' });
@@ -85,8 +49,11 @@ export class SecurityController {
 
   async getSecurityScore(req: Request, res: Response) {
     try {
-      const score = await this.calculateSecurityScore();
-      res.json({ score });
+      const tenantId = req.user?.tenantId || '550e8400-e29b-41d4-a716-446655440001'; // Demo tenant fallback
+      
+      const metrics = await analyticsService.getDashboardMetrics(tenantId);
+      
+      res.json({ score: metrics.securityScore });
     } catch (error) {
       logger.error('Error calculating security score:', error);
       res.status(500).json({ error: 'Failed to calculate security score' });
@@ -107,62 +74,6 @@ export class SecurityController {
     }
   }
 
-  private async calculateSecurityScore(): Promise<number> {
-    try {
-      const [
-        totalAssets,
-        vulnerableAssets,
-        criticalVulns,
-        usersWithMFA,
-        totalUsers
-      ] = await Promise.all([
-        Asset.countDocuments(),
-        Asset.countDocuments({ vulnerabilities: { $gt: 0 } }),
-        Vulnerability.countDocuments({ severity: 'Critical', status: 'Open' }),
-        User.countDocuments({ mfaEnabled: true }),
-        User.countDocuments()
-      ]);
-
-      // Security score calculation (0-100)
-      let score = 100;
-      
-      // Deduct points for vulnerabilities
-      if (totalAssets > 0) {
-        const vulnRatio = vulnerableAssets / totalAssets;
-        score -= vulnRatio * 30; // Max 30 points deduction
-      }
-      
-      // Deduct points for critical vulnerabilities
-      score -= Math.min(criticalVulns * 5, 25); // Max 25 points deduction
-      
-      // Deduct points for poor MFA adoption
-      if (totalUsers > 0) {
-        const mfaRatio = usersWithMFA / totalUsers;
-        score -= (1 - mfaRatio) * 20; // Max 20 points deduction
-      }
-      
-      return Math.max(Math.round(score), 0);
-    } catch (error) {
-      logger.error('Error calculating security score:', error);
-      return 85; // Default fallback score
-    }
-  }
-
-  private async calculateComplianceStatus(): Promise<number> {
-    // Simplified compliance calculation
-    // In a real implementation, this would check against specific compliance frameworks
-    const [
-      assetsWithCompliance,
-      totalAssets
-    ] = await Promise.all([
-      Asset.countDocuments({ compliance: { $ne: [] } }),
-      Asset.countDocuments()
-    ]);
-
-    if (totalAssets === 0) return 100;
-    return Math.round((assetsWithCompliance / totalAssets) * 100);
-  }
-
   private async calculateSecurityTrends(timeRange: string) {
     // This would implement actual trend calculation based on historical data
     // For now, returning mock trends
@@ -178,20 +89,5 @@ export class SecurityController {
         { date: '2024-01-15', value: 2 }
       ]
     };
-  }
-
-  private formatTimeAgo(date: Date): string {
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} minutes ago`;
-    
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours} hours ago`;
-    
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays} days ago`;
   }
 }

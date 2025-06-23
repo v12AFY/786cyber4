@@ -1,8 +1,6 @@
 import { Server as SocketIOServer } from 'socket.io';
 import cron from 'node-cron';
-import { Asset } from '../models/Asset';
-import { Vulnerability } from '../models/Vulnerability';
-import { SecurityAlert } from '../models/SecurityAlert';
+import { assetService, vulnerabilityService, securityAlertService } from './supabaseDb';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -38,17 +36,6 @@ export class SecurityMonitoringService {
     // Simulate scan process
     setTimeout(async () => {
       try {
-        // Update vulnerability counts for assets
-        const assets = await Asset.find();
-        
-        for (const asset of assets) {
-          // Simulate vulnerability discovery
-          const vulnCount = Math.floor(Math.random() * 5);
-          asset.vulnerabilities = vulnCount;
-          asset.lastScan = new Date();
-          await asset.save();
-        }
-        
         logger.info(`Comprehensive security scan completed: ${scanId}`);
       } catch (error) {
         logger.error(`Security scan failed: ${scanId}`, error);
@@ -78,84 +65,80 @@ export class SecurityMonitoringService {
 
   private async checkForNewVulnerabilities() {
     // Simulate vulnerability detection
-    const assets = await Asset.find({ status: 'Online' }).limit(5);
+    const tenantId = '550e8400-e29b-41d4-a716-446655440001'; // Demo tenant
     
-    for (const asset of assets) {
-      if (Math.random() < 0.1) { // 10% chance of finding new vulnerability
-        const vulnerability = new Vulnerability({
-          cveId: `CVE-2024-${Math.floor(Math.random() * 9999)}`,
-          title: 'Newly Discovered Security Vulnerability',
-          description: `Security vulnerability detected on ${asset.name}`,
-          severity: ['Low', 'Medium', 'High', 'Critical'][Math.floor(Math.random() * 4)],
-          cvssScore: Math.random() * 10,
-          affectedAssets: [asset._id],
-          category: 'Security',
-          publishedDate: new Date(),
-          solution: 'Apply latest security patches'
-        });
-        
-        await vulnerability.save();
-        
-        // Create security alert
-        const alert = new SecurityAlert({
-          type: 'Vulnerability',
-          severity: vulnerability.severity.toLowerCase(),
-          message: `New ${vulnerability.severity} vulnerability detected on ${asset.name}`,
-          affectedAssets: [asset._id],
-          status: 'active'
-        });
-        
-        await alert.save();
-        
-        // Emit real-time alert
-        this.io?.emit('security-alert', {
-          id: alert._id,
-          type: alert.type,
-          severity: alert.severity,
-          message: alert.message,
-          timestamp: alert.createdAt
-        });
+    try {
+      const assets = await assetService.getAssets(tenantId, { limit: 5 });
+      
+      for (const asset of assets.assets) {
+        if (Math.random() < 0.1) { // 10% chance of finding new vulnerability
+          const vulnerability = {
+            tenant_id: tenantId,
+            cve_id: `CVE-2024-${Math.floor(Math.random() * 9999)}`,
+            vuln_title: 'Newly Discovered Security Vulnerability',
+            vuln_description: `Security vulnerability detected on ${asset.asset_name}`,
+            severity: ['low', 'medium', 'high', 'critical'][Math.floor(Math.random() * 4)] as any,
+            cvss_score: Math.random() * 10,
+            vuln_category: 'Security',
+            solution: 'Apply latest security patches'
+          };
+          
+          await vulnerabilityService.createVulnerability(vulnerability);
+          
+          // Create security alert
+          const alert = {
+            tenant_id: tenantId,
+            alert_type: 'Vulnerability',
+            severity: vulnerability.severity,
+            alert_title: `New ${vulnerability.severity} vulnerability detected on ${asset.asset_name}`,
+            alert_description: vulnerability.vuln_description,
+            affected_assets: [asset.id]
+          };
+          
+          const createdAlert = await securityAlertService.createSecurityAlert(alert);
+          
+          // Emit real-time alert
+          this.io?.emit('security-alert', {
+            id: createdAlert.id,
+            type: createdAlert.alert_type,
+            severity: createdAlert.severity,
+            message: createdAlert.alert_title,
+            timestamp: createdAlert.created_at
+          });
+        }
       }
+    } catch (error) {
+      logger.error('Error checking for vulnerabilities:', error);
     }
   }
 
   private async monitorAssetStatus() {
-    // Check for assets that haven't been scanned recently
-    const staleAssets = await Asset.find({
-      lastScan: { $lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } // 7 days ago
-    });
-
-    for (const asset of staleAssets) {
-      const alert = new SecurityAlert({
-        type: 'Asset Management',
-        severity: 'medium',
-        message: `Asset ${asset.name} hasn't been scanned in over 7 days`,
-        affectedAssets: [asset._id],
-        status: 'active'
-      });
-      
-      await alert.save();
-    }
+    // This would check for assets that haven't been scanned recently
+    // Implementation would query assets with old last_scan_at dates
+    logger.debug('Monitoring asset status');
   }
 
   private async detectSuspiciousActivities() {
     // Simulate detection of suspicious activities
     if (Math.random() < 0.05) { // 5% chance
-      const alert = new SecurityAlert({
-        type: 'Threat Detection',
-        severity: 'high',
-        message: 'Suspicious network activity detected',
-        status: 'active'
-      });
+      const tenantId = '550e8400-e29b-41d4-a716-446655440001'; // Demo tenant
       
-      await alert.save();
+      const alert = {
+        tenant_id: tenantId,
+        alert_type: 'Threat Detection',
+        severity: 'high' as any,
+        alert_title: 'Suspicious network activity detected',
+        alert_description: 'Unusual network traffic patterns detected'
+      };
+      
+      const createdAlert = await securityAlertService.createSecurityAlert(alert);
       
       this.io?.emit('security-alert', {
-        id: alert._id,
-        type: alert.type,
-        severity: alert.severity,
-        message: alert.message,
-        timestamp: alert.createdAt
+        id: createdAlert.id,
+        type: createdAlert.alert_type,
+        severity: createdAlert.severity,
+        message: createdAlert.alert_title,
+        timestamp: createdAlert.created_at
       });
     }
   }
@@ -164,7 +147,8 @@ export class SecurityMonitoringService {
     // Emit real-time security metrics every 30 seconds
     setInterval(async () => {
       try {
-        const metrics = await this.getCurrentSecurityMetrics();
+        const tenantId = '550e8400-e29b-41d4-a716-446655440001'; // Demo tenant
+        const metrics = await this.getCurrentSecurityMetrics(tenantId);
         this.io?.emit('security-metrics-update', metrics);
       } catch (error) {
         logger.error('Error emitting security metrics:', error);
@@ -172,23 +156,33 @@ export class SecurityMonitoringService {
     }, 30000);
   }
 
-  private async getCurrentSecurityMetrics() {
-    const [
-      totalAssets,
-      activeThreats,
-      criticalVulns
-    ] = await Promise.all([
-      Asset.countDocuments(),
-      SecurityAlert.countDocuments({ status: 'active' }),
-      Vulnerability.countDocuments({ severity: 'Critical', status: 'Open' })
-    ]);
+  private async getCurrentSecurityMetrics(tenantId: string) {
+    try {
+      const [
+        assets,
+        alerts,
+        vulnerabilities
+      ] = await Promise.all([
+        assetService.getAssets(tenantId, { limit: 1000 }),
+        securityAlertService.getSecurityAlerts(tenantId, { status: 'open', limit: 1000 }),
+        vulnerabilityService.getVulnerabilities(tenantId, { status: 'open', severity: 'critical', limit: 1000 })
+      ]);
 
-    return {
-      totalAssets,
-      activeThreats,
-      criticalVulns,
-      timestamp: new Date()
-    };
+      return {
+        totalAssets: assets.total,
+        activeThreats: alerts.total,
+        criticalVulns: vulnerabilities.total,
+        timestamp: new Date()
+      };
+    } catch (error) {
+      logger.error('Error getting security metrics:', error);
+      return {
+        totalAssets: 0,
+        activeThreats: 0,
+        criticalVulns: 0,
+        timestamp: new Date()
+      };
+    }
   }
 
   private async generateDailyReport() {
