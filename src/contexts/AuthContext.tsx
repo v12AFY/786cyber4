@@ -146,6 +146,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         success: false, 
         error: error.message || 'Login failed. Please try again.' 
       };
+    // Explicitly set the session to ensure RLS context is properly established
+    if (authData.session) {
+      await supabase.auth.setSession(authData.session);
+    }
+
     } finally {
       setIsLoading(false);
     }
@@ -155,7 +160,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setIsLoading(true);
       
-      // Create auth user
+      const { error: tenantUserError } = await supabase.from('tenant_users').insert({
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
@@ -165,6 +170,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           }
         }
       });
+
+      if (tenantUserError) {
+        console.error('Error creating tenant user:', tenantUserError);
+        return { success: false, error: 'Failed to complete user setup. Please try again.' };
+      }
+
+      // Load user with tenant data to update auth state
+      await loadUserWithTenant(authData.user);
 
       if (authError) {
         return { success: false, error: authError.message };
