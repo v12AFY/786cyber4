@@ -146,11 +146,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         success: false, 
         error: error.message || 'Login failed. Please try again.' 
       };
-    // Explicitly set the session to ensure RLS context is properly established
-    if (authData.session) {
-      await supabase.auth.setSession(authData.session);
-    }
-
     } finally {
       setIsLoading(false);
     }
@@ -160,7 +155,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setIsLoading(true);
       
-      const { error: tenantUserError } = await supabase.from('tenant_users').insert({
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
@@ -170,14 +164,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           }
         }
       });
-
-      if (tenantUserError) {
-        console.error('Error creating tenant user:', tenantUserError);
-        return { success: false, error: 'Failed to complete user setup. Please try again.' };
-      }
-
-      // Load user with tenant data to update auth state
-      await loadUserWithTenant(authData.user);
 
       if (authError) {
         return { success: false, error: authError.message };
@@ -196,7 +182,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         });
 
         // Create tenant user relationship
-        await supabase.from('tenant_users').insert({
+        const { error: tenantUserError } = await supabase.from('tenant_users').insert({
           auth_user_id: authData.user.id,
           email: userData.email,
           full_name: userData.name,
@@ -205,6 +191,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           department: userData.department || null,
           is_active: true
         });
+
+        if (tenantUserError) {
+          console.error('Error creating tenant user:', tenantUserError);
+          return { success: false, error: 'Failed to complete user setup. Please try again.' };
+        }
+
+        // Load user with tenant data to update auth state
+        await loadUserWithTenant(authData.user);
       }
 
       return { success: true };
